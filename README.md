@@ -6,7 +6,7 @@ Restoring rain images is important for many computer vision applications in outd
 
 In recent years, various methods mainly based on CNNs have been proposed to address this problem.
 
-This repository records some papers with implementation and finally make comparison between them.
+This repo records some papers with implementation and finally make comparison between them.
 
 ## Important Papers and Implementations
 
@@ -54,4 +54,34 @@ This repository records some papers with implementation and finally make compari
     - [Notes]()
     
     
-## Implementations of above
+## Implementations of above in pytorch
+
+### Prerequisite
+- Python>=3.6
+- Pytorch>=4.1.0
+- Opencv>=3.1.0
+- visdom
+
+    pip install -r requirements.txt
+
+### Project Structure
+- checkpoints : holds checkpoints
+- datasets : 
+- losses: losses like ssim and psnr
+- models: holds model for training or testing
+- pretrained_models: holds pretrained model for fine-ture
+- settings : holds seperate setting config for model
+- utils : practical tools 
+
+### Datasets
+- RESCAN : [Rain800](https://drive.google.com/drive/folders/0Bw2e6Q0nQQvGbi1xV1Yxd09rY2s)
+- JORDER : [Rain100H,Rain100L](http://www.icst.pku.edu.cn/struct/Projects/joint_rain_removal.html)
+
+### Training
+
+### Testing
+
+
+
+    
+    

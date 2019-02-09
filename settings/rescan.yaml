@@ -1,0 +1,23 @@
+channel : 24
+stage_num : 4
+depth : 7  # >:3
+use_se : true
+uint : 'GRU'  # ['Conv', 'RNN', 'GRU', 'LSTM']
+frame : 'Full'  # ['Add', 'Full']
+
+aug_data : false  # Set as False for fair comparison
+
+batch_size : 64
+patch_size : 64
+lr : 5e-3
+
+checkpoint_dir : './checkpoints/rescan/'
+show_dir : './checkpoints/rescan/'
+pretrained_model_dir : './pretrained_models/rescan/'
+
+log_level : 'info'
+save_steps : 1000
+
+num_workers : 8
+num_GPU : 1
+device_id : 0

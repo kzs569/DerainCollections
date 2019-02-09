@@ -1,0 +1,8 @@
+visdom
+torchvision
+tqdm
+pyyaml
+ipdb
+numpy
+scipy
+torch

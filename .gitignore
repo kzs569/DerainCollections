@@ -1,8 +1,7 @@
-data/
 imgs/
-pretrain_model/
 checkpoints/
 
+datasets/
 dataset/
 
 .idea/
