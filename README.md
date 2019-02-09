@@ -58,11 +58,14 @@ This repo records some papers with implementation and finally make comparison be
 
 ### Prerequisite
 - Python>=3.6
-- Pytorch>=4.1.0
+- Pytorch>=1.0.0
 - Opencv>=3.1.0
 - visdom
 
+```bash
     pip install -r requirements.txt
+
+``` 
 
 ### Project Structure
 - checkpoints : holds checkpoints
