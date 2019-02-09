@@ -1,16 +1,18 @@
-Deep Convolutional Network in Derain
+Deep Convolutional Network in Single Image Derain
 ==================================
 
-## 
-图像去雨是图像处理和计算机视觉领域共同关心的重要问题，传统的关于图像去雨的图像恢复方法在某些特定的情况下会失效，鉴于深度卷积神经网络（CNN）在计算机视觉领域的迅猛发展及其良好的学习性能，越来越多的研究者将CNN应用到图像恢复领域。
+## Overview
+Restoring rain images is important for many computer vision applications in outdoor scenes since rain streaks can severely degrade the visibility causing many current computer vision algorithms fails to work.
 
-本仓库记录了近年来利用深度神经网络处理去雨问题的重要文章。
+In recent years, various methods mainly based on CNNs have been proposed to address this problem.
+
+This repository records some papers with implementation and finally make comparison between them.
 
 ## Important Papers and Implementations
 
 1. DID-MDN(<u>*SOTA*</u>)
 
-    - 论文
+    - Paper
     
          [Density-aware Single Image De-raining using a Multi-stream Dense Network, He Zhang, Vishal M. Patel, 2018](https://arxiv.org/pdf/1802.07412.pdf)
     
@@ -21,7 +23,7 @@ Deep Convolutional Network in Derain
     - [Notes]()
 2. Current JORDAR
 
-    - 论文
+    - Paper
     
          [Deep Joint Rain Detection and Removal from a Single Image, Wenhan Yang, Robby T. Tan et al, 2017](https://arxiv.org/pdf/1609.07769.pdf)
     
@@ -33,7 +35,7 @@ Deep Convolutional Network in Derain
 
 3. RESCAN
 
-    - 论文
+    - Paper
     
          [Recurrent Squeeze-and-Excitation Context Aggregation Net for Single Image Deraining, Xia Li, Jianlong Wu et al, 2018](https://arxiv.org/pdf/1807.05698.pdf)
     
@@ -45,8 +47,11 @@ Deep Convolutional Network in Derain
 
 4. Attentive-GAN for Raindrop Removal
 
-    - 论文
+    - Paper
         
         [Attentive Generative Adversarial Network for Raindrop Removal from A Single Image,Rui Qian, Robby T. Tan et al, 2017](https://arxiv.org/pdf/1711.10098.pdf)
         
     - [Notes]()
+    
+    
+## Implementations of above
