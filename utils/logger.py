@@ -1,14 +1,16 @@
+import datetime
 import logging
+import os
 
 
-def get_logger():
-    logger = logging.getLogger('train')
+def get_logger(logdir):
+    logger = logging.getLogger("raindrop_removal")
+    ts = str(datetime.datetime.now()).split(".")[0].replace(" ", "_")
+    ts = ts.replace(":", "_").replace("-", "_")
+    file_path = os.path.join(logdir, "run_{}.log".format(ts))
+    hdlr = logging.FileHandler(file_path)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    hdlr.setFormatter(formatter)
+    logger.addHandler(hdlr)
     logger.setLevel(logging.INFO)
-
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
     return logger

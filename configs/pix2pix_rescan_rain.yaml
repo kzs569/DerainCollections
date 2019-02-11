@@ -1,0 +1,39 @@
+data:
+  dataset : rescan_rain
+  path : ./datasets/rescan_rain/
+  train_split : train
+  val_split : val
+  test_split : test
+  patch_size : 64
+  aug_data : false  # Set as False for fair comparison
+
+model : pix2pix
+resume : true
+netd : pix2pix_d
+netg : pix2pix_g
+batch_size : 1
+input_nc : 3
+output_nc : 3
+direction : OtoB
+lamb : 100
+ngf : 64
+ndf : 64
+fineSize : 64
+
+optimizer :
+  name : 'adam'
+  lr : 2.0e-4
+  beta1 : 0.5
+
+checkpoint_dir : './checkpoints/pix2pix/'
+show_dir : './checkpoints/pix2pix/'
+pretrained_model_dir : './pretrained_models/pix2pix/'
+save_steps : 10
+max_iters : 200
+n_workers : 8
+
+log_level : 'info'
+
+vis :
+  use : true
+  env : 'pix2pix'

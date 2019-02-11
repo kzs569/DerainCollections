@@ -1,21 +1,25 @@
 import os
+import random
+import shutil
+
 import cv2
 import argparse
 import numpy as np
+import yaml
 
 import torch
 from torch.nn import MSELoss
-from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
-from tensorboardX import SummaryWriter
 
-from datasets.rescan import TrainValDataset
-from models.rescan import RESCAN
+from datasets import get_loader
+from models import get_model
 from losses.cal_ssim import SSIM
-from utils.setting import *
-from utils.logger import *
+from utils.visualize import Visualizer
+from utils.logger import get_logger
+from utils import clean_dir
+from optimizers import get_optimizer
 
 
 def ensure_dir(dir_path):
@@ -23,68 +27,130 @@ def ensure_dir(dir_path):
         os.makedirs(dir_path)
 
 
-class Session:
-    def __init__(self, setting, logger):
-        self.setting = setting
-        self.model_dir = setting.checkpoint_dir
-        ensure_dir(setting.checkpoint_dir)
-        ##待修改
-        self.net = RESCAN().cuda()
-        self.crit = MSELoss().cuda()
-        self.ssim = SSIM().cuda()
+def save_checkpoints(model, step, optim, model_dir, name='lastest'):
+    ckp_path = os.path.join(model_dir, name)
+    obj = {
+        'net': model.state_dict(),
+        'clock': step,
+        'opt': optim.state_dict(),
+    }
+    torch.save(obj, ckp_path)
 
-        self.step = 0
-        self.save_steps = setting.save_steps
-        self.num_workers = setting.num_workers
-        self.batch_size = setting.batch_size
-        self.dataloaders = {}
 
-        self.opt = Adam(self.net.parameters(), lr=setting.lr)
-        self.sche = MultiStepLR(self.opt, milestones=[15000, 17500], gamma=0.1)
+def load_checkpoints(model, optim, model_dir, name='lastest'):
+    ckp_path = os.path.join(model_dir, name)
+    try:
+        print('Load checkpoint %s' % ckp_path)
+        obj = torch.load(ckp_path)
+    except FileNotFoundError:
+        print('No checkpoint %s!!' % ckp_path)
+        return False, None
+    model.load_state_dict(obj['net'])
+    optim.load_state_dict(obj['opt'])
+    step = obj['clock']
+    return True, step
 
-    def get_dataloader(self, dataset, dtype):
-        dataset = TrainValDataset(setting, dataset, dtype)
-        if not dataset in self.dataloaders:
-            self.dataloaders[dataset] = \
-                DataLoader(dataset, batch_size=self.batch_size,
-                           shuffle=True, num_workers=self.num_workers, drop_last=True)
-        return iter(self.dataloaders[dataset])
 
-    def save_checkpoints(self, name):
-        ckp_path = os.path.join(self.model_dir, name)
-        obj = {
-            'net': self.net.state_dict(),
-            'clock': self.step,
-            'opt': self.opt.state_dict(),
-        }
-        torch.save(obj, ckp_path)
+def save_image(name, img_lists, path, step):
+    data, pred, label = img_lists
+    pred = pred.cpu().data
 
-    def load_checkpoints(self, name):
-        ckp_path = os.path.join(self.model_dir, name)
+    data, label, pred = data * 255, label * 255, pred * 255
+    pred = np.clip(pred, 0, 255)
+
+    h, w = pred.shape[-2:]
+
+    gen_num = (6, 2)
+    img = np.zeros((gen_num[0] * h, gen_num[1] * 3 * w, 3))
+    for img_list in img_lists:
+        for i in range(gen_num[0]):
+            row = i * h
+            for j in range(gen_num[1]):
+                idx = i * gen_num[1] + j
+                tmp_list = [data[idx], pred[idx], label[idx]]
+                for k in range(3):
+                    col = (j * 3 + k) * w
+                    tmp = np.transpose(tmp_list[k], (1, 2, 0))
+                    img[row: row + h, col: col + w] = tmp
+
+    img_file = os.path.join(path, '%d_%s.jpg' % (step, name))
+    cv2.imwrite(img_file, img)
+
+
+def train(cfg, logger, vis):
+    # Setup seeds
+    torch.manual_seed(cfg.get("seed", 1337))
+    torch.cuda.manual_seed(cfg.get("seed", 1337))
+    np.random.seed(cfg.get("seed", 1337))
+    random.seed(cfg.get("seed", 1337))
+
+    # Setup device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Setup Dataloader
+    data_loader = get_loader(cfg["data"]["dataset"])
+    data_path = cfg["data"]["path"]
+
+    t_loader = data_loader(
+        data_path,
+        split=cfg["data"]["train_split"],
+        patch_size=cfg['data']['patch_size'],
+        augmentation=cfg['data']['aug_data']
+    )
+
+    v_loader = data_loader(
+        data_path,
+        split=cfg["data"]["val_split"],
+    )
+
+    trainloader = DataLoader(
+        t_loader,
+        batch_size=cfg["batch_size"],
+        num_workers=cfg["n_workers"],
+        shuffle=True,
+    )
+
+    valloader = DataLoader(
+        v_loader, batch_size=cfg["batch_size"], num_workers=cfg["n_workers"]
+    )
+
+    # Setup model, optimizer and loss function
+    model_cls = get_model(cfg['model'])
+    model = model_cls(cfg).to(device)
+
+    optimizer_cls = get_optimizer(cfg)
+    optimizer_params = {k: v for k, v in cfg["optimizer"].items() if k != "name"}
+    optimizer = optimizer_cls(model.parameters(), **optimizer_params)
+
+    scheduler = MultiStepLR(optimizer, milestones=[15000, 17500], gamma=0.1)
+
+    crit = MSELoss().cuda()
+    ssim = SSIM().cuda()
+
+    step = 0
+
+    if cfg['resume'] is not None:
+        pass
+
+    while step < cfg['max_iters']:
+        scheduler.step()
+        model.train()
+
         try:
-            obj = torch.load(ckp_path)
-        except FileNotFoundError:
-            return
-        self.net.load_state_dict(obj['net'])
-        self.opt.load_state_dict(obj['opt'])
-        self.step = obj['clock']
-        self.sche.last_epoch = self.step
+            O, B = next(iter(trainloader))
+        except StopIteration:
+            O, B = next(iter(trainloader))
 
-    def inf_batch(self, name, batch):
-        if name == 'train':
-            self.net.zero_grad()
-
-        O, B = batch['O'].cuda(), batch['B'].cuda()
+        O, B = O.cuda(), B.cuda()
         O, B = Variable(O, requires_grad=False), Variable(B, requires_grad=False)
         R = O - B
 
-        O_Rs = self.net(O)
-        loss_list = [self.crit(O_R, R) for O_R in O_Rs]
-        ssim_list = [self.ssim(O - O_R, O - R) for O_R in O_Rs]
+        O_Rs = model(O)
+        loss_list = [crit(O_R, R) for O_R in O_Rs]
+        ssim_list = [ssim(O - O_R, O - R) for O_R in O_Rs]
 
-        if name == 'train':
-            sum(loss_list).backward()
-            self.opt.step()
+        sum(loss_list).backward()
+        optimizer.step()
 
         losses = {
             'loss%d' % i: loss.item()
@@ -95,92 +161,245 @@ class Session:
             for i, ssim in enumerate(ssim_list)
         }
         losses.update(ssimes)
-        self.write(name, losses)
 
-        return O - O_Rs[-1]
+        losses['lr'] = optimizer.param_groups[0]['lr']
+        losses['step'] = step
+        outputs = [
+            "{}:{:.4g}".format(k, v)
+            for k, v in losses.items()
+        ]
+        logger.info('train' + '--' + ' '.join(outputs))
 
-    def save_image(self, name, img_lists):
-        data, pred, label = img_lists
-        pred = pred.cpu().data
+        pred = O - O_Rs[-1]
 
-        data, label, pred = data * 255, label * 255, pred * 255
-        pred = np.clip(pred, 0, 255)
+        if vis is not None:
+            for k, v in losses.items():
+                vis.plot(k, v)
+            vis.images(np.clip(pred.detach().cpu().numpy(), 0, 255)[:64], win='pred')
+            vis.images(O.data.cpu().numpy()[:64], win='input')
+            vis.images(B.data.cpu().numpy()[:64], win='groundtruth')
 
-        h, w = pred.shape[-2:]
+        # if step % 4 == 0:
+        #     model.eval()
+        #     batch_v = next(iter(valloader))
+        #
+        #     pred_v = sess.inf_batch('val', batch_v)
 
-        gen_num = (6, 2)
-        img = np.zeros((gen_num[0] * h, gen_num[1] * 3 * w, 3))
-        for img_list in img_lists:
-            for i in range(gen_num[0]):
-                row = i * h
-                for j in range(gen_num[1]):
-                    idx = i * gen_num[1] + j
-                    tmp_list = [data[idx], pred[idx], label[idx]]
-                    for k in range(3):
-                        col = (j * 3 + k) * w
-                        tmp = np.transpose(tmp_list[k], (1, 2, 0))
-                        img[row: row + h, col: col + w] = tmp
+        if step % int(cfg['save_steps'] / 16) == 0:
+            save_checkpoints(model, step, optimizer, cfg['checkpoint_dir'], 'latest')
+        if step % int(cfg['save_steps'] / 2) == 0:
+            save_image('train', [O.cpu(), pred.cpu(), B.cpu()], cfg['checkpoint_dir'], step)
+            # if step % 4 == 0:
+            #     save_image('val', [batch_v['O'], pred_v, batch_v['B']])
+            logger.info('save image as step_%d' % step)
+        if step % cfg['save_steps'] == 0:
+            save_checkpoints(model=model,
+                             step=step,
+                             optim=optimizer,
+                             model_dir=cfg['checkpoint_dir'],
+                             name='{}_step_{}'.format(cfg['model'] + cfg['data']['dataset'], step))
+            logger.info('save model as step_%d' % step)
+        step += 1
 
-        img_file = os.path.join(self.log_dir, '%d_%s.jpg' % (self.step, name))
-        cv2.imwrite(img_file, img)
 
+def train_gan(cfg, logger, vis):
+    # Setup seeds
+    torch.manual_seed(cfg.get("seed", 1337))
+    torch.cuda.manual_seed(cfg.get("seed", 1337))
+    np.random.seed(cfg.get("seed", 1337))
+    random.seed(cfg.get("seed", 1337))
 
-def run_train_val(setting, args, logger):
-    sess = Session(setting, logger)
+    # Setup device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if not args.retrain:
-        lastest_model_path = os.path.join(setting.checkpoint_dir, 'lastest.ptb')
-        sess.load_checkpoints(lastest_model_path)
+    # Setup Dataloader
+    data_loader = get_loader(cfg["data"]["dataset"])
+    data_path = cfg["data"]["path"]
 
-    dt_train = sess.get_dataloader(args.dataset, 'train')
-    dt_val = sess.get_dataloader(args.dataset, 'val')
+    t_loader = data_loader(
+        data_path,
+        split=cfg["data"]["train_split"],
+        patch_size=cfg['data']['patch_size'],
+        augmentation=cfg['data']['aug_data']
+    )
 
-    while sess.step < 20000:
-        sess.sche.step()
-        sess.net.train()
+    v_loader = data_loader(
+        data_path,
+        split=cfg["data"]["val_split"],
+    )
 
-        try:
-            batch_t = next(dt_train)
-        except StopIteration:
-            dt_train = sess.get_dataloader('train')
-            batch_t = next(dt_train)
-        pred_t = sess.inf_batch('train', batch_t)
+    train_loader = DataLoader(
+        t_loader,
+        batch_size=cfg["batch_size"],
+        num_workers=cfg["n_workers"],
+        shuffle=True,
+    )
 
-        if sess.step % 4 == 0:
-            sess.net.eval()
-            try:
-                batch_v = next(dt_val)
-            except StopIteration:
-                dt_val = sess.get_dataloader('val')
-                batch_v = next(dt_val)
-            pred_v = sess.inf_batch('val', batch_v)
+    val_loader = DataLoader(
+        v_loader, batch_size=cfg["batch_size"], num_workers=cfg["n_workers"]
+    )
 
-        if sess.step % int(sess.save_steps / 16) == 0:
-            sess.save_checkpoints('latest')
-        if sess.step % int(sess.save_steps / 2) == 0:
-            sess.save_image('train', [batch_t['O'], pred_t, batch_t['B']])
-            if sess.step % 4 == 0:
-                sess.save_image('val', [batch_v['O'], pred_v, batch_v['B']])
-            logger.info('save image as step_%d' % sess.step)
-        if sess.step % sess.save_steps == 0:
-            sess.save_checkpoints('{}_step_{}'.format(setting.dataset_name, sess.step))
-            logger.info('save model as step_%d' % sess.step)
-        sess.step += 1
+    # custom weights initialization called on netG and netD
+    def weights_init(m):
+        classname = m.__class__.__name__
+        if classname.find('Conv') != -1:
+            m.weight.data.normal_(0.0, 0.02)
+            m.bias.data.fill_(0)
+        elif classname.find('BatchNorm') != -1:
+            m.weight.data.normal_(1.0, 0.02)
+            m.bias.data.fill_(0)
+
+    ndf = cfg['ndf']
+    ngf = cfg['ngf']
+    nc = 3
+
+    netD_cls = get_model(cfg['netd'])
+    netG_cls = get_model(cfg['netg'])
+
+    netD = netD_cls(cfg['input_nc'], cfg['output_nc'], cfg['ndf']).to(device)
+    netG = netG_cls(cfg['input_nc'], cfg['output_nc'], cfg['ngf']).to(device)
+
+    netG.apply(weights_init)
+    netD.apply(weights_init)
+    logger.info(netD)
+    logger.info(netG)
+
+    ###########   LOSS & OPTIMIZER   ##########
+    criterion = torch.nn.BCELoss()
+    criterionL1 = torch.nn.L1Loss()
+    optimizerD = torch.optim.Adam(netD.parameters(), lr=cfg['optimizer']['lr'],
+                                  betas=(cfg['optimizer']['beta1'], 0.999))
+    optimizerG = torch.optim.Adam(netG.parameters(), lr=cfg['optimizer']['lr'],
+                                  betas=(cfg['optimizer']['beta1'], 0.999))
+
+    ###########   GLOBAL VARIABLES   ###########
+    input_nc = cfg['input_nc']
+    output_nc = cfg['output_nc']
+    fineSize = cfg['fineSize']
+
+    real_A = torch.FloatTensor(cfg['batch_size'], input_nc, fineSize, fineSize)
+    real_B = torch.FloatTensor(cfg['batch_size'], input_nc, fineSize, fineSize)
+    label = torch.FloatTensor(cfg['batch_size'])
+
+    real_A = Variable(real_A)
+    real_B = Variable(real_B)
+    label = Variable(label)
+
+    real_A = real_A.to(device)
+    real_B = real_B.to(device)
+    label = label.to(device)
+
+    real_label = 1
+    fake_label = 0
+
+    ########### Training   ###########
+    netD.train()
+    netG.train()
+    for epoch in range(1, cfg['max_iters'] + 1):
+        for i, image in enumerate(train_loader):
+            ########### fDx ###########
+            netD.zero_grad()
+            if cfg['direction'] == 'OtoB':
+                imgA = image[1]
+                imgB = image[0]
+            else:
+                imgA = image[0]
+                imgB = image[1]
+
+            # train with real data
+            real_A.data.resize_(imgA.size()).copy_(imgA)
+            real_B.data.resize_(imgB.size()).copy_(imgB)
+            real_AB = torch.cat((real_A, real_B), 1)
+
+            output = netD(real_AB)
+            label.data.resize_(output.size())
+            label.data.fill_(real_label)
+            errD_real = criterion(output, label)
+            errD_real.backward()
+
+            # train with fake
+            fake_B = netG(real_A)
+            label.data.fill_(fake_label)
+
+            fake_AB = torch.cat((real_A, fake_B), 1)
+            output = netD(fake_AB.detach())
+            errD_fake = criterion(output, label)
+            errD_fake.backward()
+
+            errD = (errD_fake + errD_real) / 2
+            optimizerD.step()
+
+            ########### fGx ###########
+            netG.zero_grad()
+            label.data.fill_(real_label)
+            output = netD(fake_AB)
+            errGAN = criterion(output, label)
+            errL1 = criterionL1(fake_B, real_B)
+            errG = errGAN + cfg['lamb'] * errL1
+
+            errG.backward()
+
+            optimizerG.step()
+
+            ########### Logging ##########
+            if (i % 50 == 0):
+                logger.info('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f Loss_L1: %.4f'
+                            % (epoch, cfg['max_iters'], i, len(train_loader),
+                               errD.item(), errGAN.item(), errL1.item()))
+
+            if cfg['vis']['use'] and (i % 50 == 0):
+                fake_B = netG(real_A)
+                vis.images(real_A.data.cpu().numpy()[:64] * 0.5 + 0.5, win='real_A')
+                vis.images(fake_B.detach().cpu().numpy()[:64] * 0.5 + 0.5, win='fake_B')
+                vis.images(real_B.data.cpu().numpy()[:64] * 0.5 + 0.5, win='real_B')
+                vis.plot('error_d', errD.item())
+                vis.plot('error_g', errGAN.item())
+                vis.plot('error_L1', errL1.item())
+
+        ########## Visualize #########
+        if (epoch % 5 == 0):
+            save_image(
+                name='train',
+                img_lists=[real_A.data.cpu(), fake_B.data.cpu(), real_B.data.cpu()],
+                path='%s/fake_samples_epoch_%03d.png' % (cfg['checkpoint_dir'], epoch),
+                step=epoch
+            )
+
+    torch.save(netG.state_dict(), '%s/netG.pth' % (cfg['checkpoint_dir']))
+    torch.save(netD.state_dict(), '%s/netD.pth' % (cfg['checkpoint_dir']))
 
 
 if __name__ == '__main__':
+
+    # Load the config file
     parser = argparse.ArgumentParser()
-    parser.add_argument('-re', '--retrain', default=True)
-    parser.add_argument('-m', '--model', required=True, choices=['rescan'])
-    parser.add_argument('-d', '--dataset', required=True, choices=['rescan_rain', 'jorder_rain100l', 'jorder_rain100h'])
+    parser.add_argument('-c', '--config', default='./configs/pix2pix_rescan_rain.yaml')
+    parser.add_argument('-t', '--ntype', default='gan', choices=['fcn', 'gan'])
     args = parser.parse_args()
 
-    setting = get_setting(args)
+    with open(args.config) as fp:
+        cfg = yaml.load(fp)
 
-    torch.cuda.manual_seed_all(66)
-    torch.manual_seed(66)
-    torch.cuda.set_device(setting.device_id)
+    if cfg['resume']:
+        clean_dir(cfg['checkpoint_dir'])
 
-    logger = get_logger()
+    # Setup the log
+    run_id = random.randint(1, 100000)
+    logdir = os.path.join(cfg['checkpoint_dir'], os.path.basename(args.config)[:-4] + str(run_id))
+    ensure_dir(logdir)
+    print("RUNDIR: {}".format(logdir))
+    shutil.copy(args.config, logdir)
+    logger = get_logger(logdir)
+    logger.info("Let the games begin")
 
-    run_train_val(setting, args, logger)
+    # Setup the Visualizer
+    if cfg['vis']['use']:
+        vis = Visualizer(cfg['vis']['env'])
+    else:
+        vis = None
+
+    torch.multiprocessing.freeze_support()
+    if args.ntype == 'fcn':
+        train(cfg, logger, vis)
+    elif args.ntype == 'gan':
+        train_gan(cfg, logger, vis)

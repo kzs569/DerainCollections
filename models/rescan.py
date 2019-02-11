@@ -3,8 +3,6 @@ from torch import nn
 from torch.autograd import Variable
 from torch.nn import functional as F
 
-import settings.rescan as settings
-
 
 class SEBlock(nn.Module):
     def __init__(self, input_dim, reduction):
@@ -33,7 +31,7 @@ class NoSEBlock(nn.Module):
         return x
 
 
-SE = SEBlock if settings.use_se else NoSEBlock
+SE = SEBlock  # if settings.use_se else NoSEBlock
 
 
 class ConvDirec(nn.Module):
@@ -141,22 +139,22 @@ class ConvLSTM(nn.Module):
         return h, [h, c]
 
 
-RecUnit = {
-    'Conv': ConvDirec,
-    'RNN': ConvRNN,
-    'GRU': ConvGRU,
-    'LSTM': ConvLSTM,
-}[settings.uint]
-
-
 class RESCAN(nn.Module):
-    def __init__(self):
+    def __init__(self, cfg):
         super().__init__()
-        channel = settings.channel
+
+        RecUnit = {
+            'Conv': ConvDirec,
+            'RNN': ConvRNN,
+            'GRU': ConvGRU,
+            'LSTM': ConvLSTM,
+        }[cfg['uint']]
+
+        channel = cfg['channel']
 
         self.rnns = nn.ModuleList(
             [RecUnit(3, channel, 3, 1)] +
-            [RecUnit(channel, channel, 3, 2 ** i) for i in range(settings.depth - 3)]
+            [RecUnit(channel, channel, 3, 2 ** i) for i in range(cfg['depth'] - 3)]
         )
 
         self.dec = nn.Sequential(
@@ -171,14 +169,16 @@ class RESCAN(nn.Module):
         old_states = [None for _ in range(len(self.rnns))]
         oups = []
 
-        for i in range(settings.stage_num):
+        for i in range(4):
             states = []
             for rnn, state in zip(self.rnns, old_states):
                 x, st = rnn(x, state)
                 states.append(st)
             x = self.dec(x)
 
-            if settings.frame == 'Add' and i > 0:
+            frame = 'Full'
+
+            if frame == 'Add' and i > 0:
                 x = x + Variable(oups[-1].data)
 
             oups.append(x)

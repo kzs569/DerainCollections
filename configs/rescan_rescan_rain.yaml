@@ -1,0 +1,35 @@
+data:
+  dataset : rescan_rain
+  path : ./datasets/rescan_rain/
+  train_split : train
+  val_split : val
+  test_split : test
+  patch_size : 64
+  aug_data : false  # Set as False for fair comparison
+
+model : rescan
+resume : true
+channel : 24
+stage_num : 4
+depth : 7  # >:3
+use_se : true
+uint : 'GRU'  # ['Conv', 'RNN', 'GRU', 'LSTM']
+frame : 'Full'  # ['Add', 'Full']
+
+batch_size : 64
+optimizer :
+  name : 'adam'
+  lr : 5.0e-3
+
+checkpoint_dir : './checkpoints/rescan/'
+show_dir : './checkpoints/rescan/'
+pretrained_model_dir : './pretrained_models/rescan/'
+save_steps : 1000
+max_iters : 20000
+n_workers : 8
+
+log_level : 'info'
+
+vis :
+  use : true
+  env : 'rescan'

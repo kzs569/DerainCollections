@@ -1,5 +1,6 @@
 imgs/
 checkpoints/
+pretrained_models/
 
 datasets/
 dataset/
