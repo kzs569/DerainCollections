@@ -136,48 +136,49 @@ def train(cfg, logger, vis):
         scheduler.step()
         model.train()
 
-        try:
-            O, B = next(iter(trainloader))
-        except StopIteration:
-            O, B = next(iter(trainloader))
-
-        O, B = O.cuda(), B.cuda()
-        O, B = Variable(O, requires_grad=False), Variable(B, requires_grad=False)
-        R = O - B
-
-        O_Rs = model(O)
-        loss_list = [crit(O_R, R) for O_R in O_Rs]
-        ssim_list = [ssim(O - O_R, O - R) for O_R in O_Rs]
-
-        sum(loss_list).backward()
-        optimizer.step()
-
-        losses = {
-            'loss%d' % i: loss.item()
-            for i, loss in enumerate(loss_list)
-        }
-        ssimes = {
-            'ssim%d' % i: ssim.item()
-            for i, ssim in enumerate(ssim_list)
-        }
-        losses.update(ssimes)
-
-        losses['lr'] = optimizer.param_groups[0]['lr']
-        losses['step'] = step
-        outputs = [
-            "{}:{:.4g}".format(k, v)
-            for k, v in losses.items()
-        ]
-        logger.info('train' + '--' + ' '.join(outputs))
-
-        pred = O - O_Rs[-1]
-
-        if vis is not None:
-            for k, v in losses.items():
-                vis.plot(k, v)
-            vis.images(np.clip(pred.detach().cpu().numpy(), 0, 255)[:64], win='pred')
-            vis.images(O.data.cpu().numpy()[:64], win='input')
-            vis.images(B.data.cpu().numpy()[:64], win='groundtruth')
+        # try:
+        #     O, B = next(iter(trainloader))
+        # except StopIteration:
+        #     O, B = next(iter(trainloader))
+        #
+        # O, B = O.cuda(), B.cuda()
+        # O, B = Variable(O, requires_grad=False), Variable(B, requires_grad=False)
+        # R = O - B
+        #
+        # O_Rs = model(O)
+        # loss_list = [crit(O_R, R) for O_R in O_Rs]
+        # ssim_list = [ssim(O - O_R, O - R) for O_R in O_Rs]
+        #
+        # sum(loss_list).backward()
+        # optimizer.step()
+        #
+        # losses = {
+        #     'loss%d' % i: loss.item()
+        #     for i, loss in enumerate(loss_list)
+        # }
+        # ssimes = {
+        #     'ssim%d' % i: ssim.item()
+        #     for i, ssim in enumerate(ssim_list)
+        # }
+        # losses.update(ssimes)
+        #
+        # losses['lr'] = optimizer.param_groups[0]['lr']
+        # losses['step'] = step
+        # outputs = [
+        #     "{}:{:.4g}".format(k, v)
+        #     for k, v in losses.items()
+        # ]
+        # logger.info('train' + '--' + ' '.join(outputs))
+        #
+        # pred = O - O_Rs[-1]
+        if cfg['model'] == 'rescan':
+            O, B, prediciton = inference_rescan(model=model, optimizer=optimizer, trainloader=trainloader,
+                                                critical=crit, ssim=ssim,
+                                                step=step, vis=vis)
+        if cfg['model'] == 'did_mdn':
+            O, B, prediciton, label = inference_didmdn(model=model, optimizer=optimizer, trainloader=trainloader,
+                                                critical=crit, ssim=ssim,
+                                                step=step, vis=vis)
 
         # if step % 4 == 0:
         #     model.eval()
@@ -188,7 +189,7 @@ def train(cfg, logger, vis):
         if step % int(cfg['save_steps'] / 16) == 0:
             save_checkpoints(model, step, optimizer, cfg['checkpoint_dir'], 'latest')
         if step % int(cfg['save_steps'] / 2) == 0:
-            save_image('train', [O.cpu(), pred.cpu(), B.cpu()], cfg['checkpoint_dir'], step)
+            save_image('train', [O.cpu(), prediciton.cpu(), B.cpu()], cfg['checkpoint_dir'], step)
             # if step % 4 == 0:
             #     save_image('val', [batch_v['O'], pred_v, batch_v['B']])
             logger.info('save image as step_%d' % step)
@@ -200,6 +201,97 @@ def train(cfg, logger, vis):
                              name='{}_step_{}'.format(cfg['model'] + cfg['data']['dataset'], step))
             logger.info('save model as step_%d' % step)
         step += 1
+
+
+def inference_rescan(model, optimizer, trainloader, critical, ssim, step, vis):
+    try:
+        O, B = next(iter(trainloader))
+    except StopIteration:
+        O, B = next(iter(trainloader))
+
+    O, B = O.cuda(), B.cuda()
+    O, B = Variable(O, requires_grad=False), Variable(B, requires_grad=False)
+    R = O - B
+
+    O_Rs = model(O)
+    loss_list = [critical(O_R, R) for O_R in O_Rs]
+    ssim_list = [ssim(O - O_R, O - R) for O_R in O_Rs]
+
+    sum(loss_list).backward()
+    optimizer.step()
+
+    losses = {
+        'loss%d' % i: loss.item()
+        for i, loss in enumerate(loss_list)
+    }
+    ssimes = {
+        'ssim%d' % i: ssim.item()
+        for i, ssim in enumerate(ssim_list)
+    }
+    losses.update(ssimes)
+
+    losses['lr'] = optimizer.param_groups[0]['lr']
+    losses['step'] = step
+    outputs = [
+        "{}:{:.4g}".format(k, v)
+        for k, v in losses.items()
+    ]
+    logger.info('train' + '--' + ' '.join(outputs))
+
+    prediction = O - O_Rs[-1]
+
+    if vis is not None:
+        for k, v in losses.items():
+            vis.plot(k, v)
+        vis.images(np.clip(prediction.detach().cpu().numpy(), 0, 255)[:64], win='pred')
+        vis.images(O.data.cpu().numpy()[:64], win='input')
+        vis.images(B.data.cpu().numpy()[:64], win='groundtruth')
+
+    return O, B, prediction
+
+
+def inference_didmdn(model, optimizer, trainloader, critical, ssim, step, vis):
+    try:
+        O, B, label = next(iter(trainloader))
+    except StopIteration:
+        O, B, label = next(iter(trainloader))
+
+    O, B, label = O.cuda(), B.cuda(), label.cuda()
+    O, B, label = Variable(O, requires_grad=False), Variable(B, requires_grad=False), Variable(label,
+                                                                                               requires_grad=False)
+    R = O - B
+
+    O_R, prediction = model(O, label)
+    loss = critical(R, O_R)
+    ssim = ssim(prediction, O)
+
+    losses = {
+        'loss%d' % i: loss.item()
+        for i, loss in enumerate(loss)
+    }
+    ssimes = {
+        'ssim%d' % i: ssim.item()
+        for i, ssim in enumerate(ssim)
+    }
+    losses.update(ssimes)
+
+    loss.backward()
+    optimizer.step()
+
+    outputs = [
+        "{}:{:.4g}".format(k, v)
+        for k, v in losses.items()
+    ]
+    logger.info('train' + '--' + ' '.join(outputs))
+
+    if vis is not None:
+        for k, v in loss.items():
+            vis.plot(k, v)
+        vis.images(np.clip(prediction.detach().cpu().numpy(), 0, 255)[:64], win='pred')
+        vis.images(O.data.cpu().numpy()[:64], win='input')
+        vis.images(B.data.cpu().numpy()[:64], win='groundtruth')
+
+    return O, B, prediction, label
 
 
 def train_gan(cfg, logger, vis):
@@ -256,8 +348,8 @@ def train_gan(cfg, logger, vis):
     netD_cls = get_model(cfg['netd'])
     netG_cls = get_model(cfg['netg'])
 
-    netD = netD_cls(cfg['input_nc'], cfg['output_nc'], cfg['ndf']).to(device)
-    netG = netG_cls(cfg['input_nc'], cfg['output_nc'], cfg['ngf']).to(device)
+    netD = netD_cls(nc, cfg['output_nc'], ndf).to(device)
+    netG = netG_cls(cfg['input_nc'], cfg['output_nc'], ngf).to(device)
 
     netG.apply(weights_init)
     netD.apply(weights_init)
@@ -373,8 +465,8 @@ if __name__ == '__main__':
 
     # Load the config file
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='./configs/pix2pix_rescan_rain.yaml')
-    parser.add_argument('-t', '--ntype', default='gan', choices=['fcn', 'gan'])
+    parser.add_argument('-c', '--config', default='./configs/didmdn_didmdn_rain.yaml')
+    parser.add_argument('-t', '--ntype', default='fcn', choices=['fcn', 'gan'])
     args = parser.parse_args()
 
     with open(args.config) as fp:

@@ -7,7 +7,7 @@ data:
   patch_size : 64
   aug_data : false  # Set as False for fair comparison
 
-model : rescan
+model : 'rescan'
 resume : true
 channel : 24
 stage_num : 4
