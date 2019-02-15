@@ -20,7 +20,7 @@ This repo records some papers with implementation and finally make comparison be
     
         [DID-MDN](https://github.com/hezhangsprinter/DID-MDN)
         
-    - [Notes]()
+    - [Notes](./Notes/DID-MDN.md)
 2. Current JORDAR
 
     - Paper
@@ -31,7 +31,7 @@ This repo records some papers with implementation and finally make comparison be
     
         [Joint Rain Detection and Removal from a Single Image](https://github.com/ZhangXinNan/RainDetectionAndRemoval)
         
-    - [Notes]() 
+    - [Notes](./Notes/CJORDAR.md) 
 
 3. RESCAN
 
@@ -43,7 +43,7 @@ This repo records some papers with implementation and finally make comparison be
     
         [RESCAN: Recurrent Squeeze-and-Excitation Context Aggregation Net](https://github.com/XiaLiPKU/RESCAN)
         
-    - [Notes]() 
+    - [Notes](./Notes/RESCAN.md) 
 
 4. Attentive-GAN for Raindrop Removal
 
@@ -51,7 +51,7 @@ This repo records some papers with implementation and finally make comparison be
         
         [Attentive Generative Adversarial Network for Raindrop Removal from A Single Image,Rui Qian, Robby T. Tan et al, 2017](https://arxiv.org/pdf/1711.10098.pdf)
         
-    - [Notes]()
+    - [Notes](./Notes/Att-GAN.md)
     
     
 ## Implementations of above in pytorch
@@ -64,7 +64,6 @@ This repo records some papers with implementation and finally make comparison be
 
 ```bash
     pip install -r requirements.txt
-
 ``` 
 
 ### Project Structure
@@ -79,11 +78,18 @@ This repo records some papers with implementation and finally make comparison be
 ### Datasets
 - RESCAN : [Rain800](https://drive.google.com/drive/folders/0Bw2e6Q0nQQvGbi1xV1Yxd09rY2s)
 - JORDER : [Rain100H,Rain100L](http://www.icst.pku.edu.cn/struct/Projects/joint_rain_removal.html)
-
+- DID-MDN : [DID-MDN](https://drive.google.com/file/d/1cMXWICiblTsRl1zjN8FizF5hXOpVOJz4/view?usp=sharing)
 ### Training
-
+Two parameters:
+-c, --config : each networks configuration files which contains the parameter about model and training details.
+-t, --type : denote the model structure fully connected network or generative adversarial networks
+```bash
+    python train.py -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
+``` 
 ### Testing
-
+```bash
+python test.py  -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
+```
 
 
     
