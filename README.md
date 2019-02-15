@@ -8,7 +8,48 @@ In recent years, various methods mainly based on CNNs have been proposed to addr
 
 This repo records some papers with implementation and finally make comparison between them.
 
-## Important Papers and Implementations
+## Important models' implementations in pytorch
+
+### Prerequisite
+- Python>=3.6
+- Pytorch>=1.0.0
+- Opencv>=3.1.0
+- visdom
+
+```bash
+    pip install -r requirements.txt
+``` 
+
+### Project Structure
+- checkpoints : holds checkpoints
+- datasets : 
+- losses: losses like ssim and psnr
+- models: holds model for training or testing
+- pretrained_models: holds pretrained model for fine-ture
+- settings : holds seperate setting config for model
+- utils : practical tools 
+
+### Datasets
+- RESCAN : [Rain800](https://drive.google.com/drive/folders/0Bw2e6Q0nQQvGbi1xV1Yxd09rY2s)
+- JORDER : [Rain100H,Rain100L](http://www.icst.pku.edu.cn/struct/Projects/joint_rain_removal.html)
+- DID-MDN : [DID-MDN](https://drive.google.com/file/d/1cMXWICiblTsRl1zjN8FizF5hXOpVOJz4/view?usp=sharing)
+### Training
+Two parameters:
+-c, --config : each networks configuration files which contains the parameter about model and training details.
+-t, --type : denote the model structure fully connected network or generative adversarial networks
+```bash
+    python train.py -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
+``` 
+### Testing
+```bash
+python test.py  -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
+```
+
+### Result
+
+
+
+## Important Papers
 
 1. DID-MDN(<u>*SOTA*</u>)
 
@@ -52,45 +93,5 @@ This repo records some papers with implementation and finally make comparison be
         [Attentive Generative Adversarial Network for Raindrop Removal from A Single Image,Rui Qian, Robby T. Tan et al, 2017](https://arxiv.org/pdf/1711.10098.pdf)
         
     - [Notes](./Notes/Att-GAN.md)
-    
-    
-## Implementations of above in pytorch
-
-### Prerequisite
-- Python>=3.6
-- Pytorch>=1.0.0
-- Opencv>=3.1.0
-- visdom
-
-```bash
-    pip install -r requirements.txt
-``` 
-
-### Project Structure
-- checkpoints : holds checkpoints
-- datasets : 
-- losses: losses like ssim and psnr
-- models: holds model for training or testing
-- pretrained_models: holds pretrained model for fine-ture
-- settings : holds seperate setting config for model
-- utils : practical tools 
-
-### Datasets
-- RESCAN : [Rain800](https://drive.google.com/drive/folders/0Bw2e6Q0nQQvGbi1xV1Yxd09rY2s)
-- JORDER : [Rain100H,Rain100L](http://www.icst.pku.edu.cn/struct/Projects/joint_rain_removal.html)
-- DID-MDN : [DID-MDN](https://drive.google.com/file/d/1cMXWICiblTsRl1zjN8FizF5hXOpVOJz4/view?usp=sharing)
-### Training
-Two parameters:
--c, --config : each networks configuration files which contains the parameter about model and training details.
--t, --type : denote the model structure fully connected network or generative adversarial networks
-```bash
-    python train.py -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
-``` 
-### Testing
-```bash
-python test.py  -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
-```
-
-
     
     
