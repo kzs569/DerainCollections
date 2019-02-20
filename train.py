@@ -53,10 +53,12 @@ def load_checkpoints(model, optim, model_dir, name='lastest'):
 
 def save_image(name, img_lists, path, step):
     data, pred, label = img_lists
-    pred = pred.cpu().data
-
-    data, label, pred = data * 255, label * 255, pred * 255
+    data, pred, label = data * 255, pred.data * 255, label * 255
     pred = np.clip(pred, 0, 255)
+
+    print(data, data.shape)
+    print(pred, pred.shape)
+    print(label, label.shape)
 
     h, w = pred.shape[-2:]
 
@@ -142,8 +144,8 @@ def train(cfg, logger, vis):
                                                 step=step, vis=vis)
         if cfg['model'] == 'did_mdn':
             O, B, prediciton, label = inference_didmdn(model=model, optimizer=optimizer, trainloader=trainloader,
-                                                critical=crit, ssim=ssim,
-                                                step=step, vis=vis)
+                                                       critical=crit, ssim=ssim,
+                                                       step=step, vis=vis)
 
         # if step % 4 == 0:
         #     model.eval()
@@ -154,7 +156,7 @@ def train(cfg, logger, vis):
         if step % int(cfg['save_steps'] / 16) == 0:
             save_checkpoints(model, step, optimizer, cfg['checkpoint_dir'], 'latest')
         if step % int(cfg['save_steps'] / 2) == 0:
-            save_image('train', [O.cpu(), prediciton.cpu(), B.cpu()], cfg['checkpoint_dir'], step)
+            #save_image('train', [O.cpu(), prediciton.cpu(), B.cpu()], cfg['checkpoint_dir'], step)
             # if step % 4 == 0:
             #     save_image('val', [batch_v['O'], pred_v, batch_v['B']])
             logger.info('save image as step_%d' % step)
@@ -222,23 +224,19 @@ def inference_didmdn(model, optimizer, trainloader, critical, ssim, step, vis):
         O, B, label = next(iter(trainloader))
 
     O, B, label = O.cuda(), B.cuda(), label.cuda()
-    O, B, label = Variable(O, requires_grad=False), Variable(B, requires_grad=False), Variable(label,
+    O, B, label = Variable(O, requires_grad=False), Variable(B, requires_grad=False), Variable(label.float(),
                                                                                                requires_grad=False)
     R = O - B
-
     O_R, prediction = model(O, label)
-    loss = critical(R, O_R)
-    ssim = ssim(prediction, O)
 
+    loss = critical(R, O_R)
+    ssims = ssim(prediction, O)
     losses = {
-        'loss%d' % i: loss.item()
-        for i, loss in enumerate(loss)
+        'loss : ': loss.item()
     }
-    ssimes = {
-        'ssim%d' % i: ssim.item()
-        for i, ssim in enumerate(ssim)
-    }
-    losses.update(ssimes)
+    losses.update({
+        'ssim : ': ssims.item()
+    })
 
     loss.backward()
     optimizer.step()
@@ -250,11 +248,12 @@ def inference_didmdn(model, optimizer, trainloader, critical, ssim, step, vis):
     logger.info('train' + '--' + ' '.join(outputs))
 
     if vis is not None:
-        for k, v in loss.items():
+        for k, v in losses.items():
             vis.plot(k, v)
-        vis.images(np.clip(prediction.detach().cpu().numpy(), 0, 255)[:64], win='pred')
-        vis.images(O.data.cpu().numpy()[:64], win='input')
-        vis.images(B.data.cpu().numpy()[:64], win='groundtruth')
+        vis.images(np.clip(prediction.detach().cpu().numpy(), 0, 255), win='pred')
+        vis.images(O.data.cpu().numpy(), win='input')
+        vis.images(B.data.cpu().numpy(), win='groundtruth')
+        vis.images(R.data.cpu().numpy(), win='raindrop')
 
     return O, B, prediction, label
 

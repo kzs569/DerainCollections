@@ -66,19 +66,13 @@ class DenseDerain(nn.Module):
         x2 = self.dense2(x)
         x1 = self.dense1(x)
 
-        #label = Variable(torch.FloatTensor(1).cuda())
-        # result = label_d.data.cpu().float().numpy()
         label = label_d.unsqueeze_(1).unsqueeze_(2).unsqueeze_(3)
-        label = label.repeat(-1, 8, self.cfg['data']['patch_size'], self.cfg['data']['patch_size'])
-        label = Variable(label, requires_grad=False)
-        # label = label.data.resize_((self.cfg['batch_size'],
-        #                             8,
-        #                             self.cfg['data']['patch_size'],
-        #                             self.cfg['data']['patch_size'])).fill_(label_result)
+        label = label.repeat(1, 8, self.cfg['data']['patch_size'], self.cfg['data']['patch_size'])
+        label = Variable(label.float(), requires_grad=False)
 
         x4 = torch.cat([x, x1, x2, x3, label], 1)
 
-        x5 = self.relu((self.refine1(x4)))
+        x5 = self.relu(self.refine1(x4))
 
         shape_out = x5.data.size()
         shape_out = shape_out[2:4]
@@ -88,10 +82,10 @@ class DenseDerain(nn.Module):
         x103 = F.avg_pool2d(x5, 8)
         x104 = F.avg_pool2d(x5, 4)
 
-        x1010 = self.upsample(self.relu((self.conv1010(x101))), size=shape_out)
-        x1020 = self.upsample(self.relu((self.conv1020(x102))), size=shape_out)
-        x1030 = self.upsample(self.relu((self.conv1030(x103))), size=shape_out)
-        x1040 = self.upsample(self.relu((self.conv1040(x104))), size=shape_out)
+        x1010 = self.upsample(self.relu(self.conv1010(x101)), size=shape_out)
+        x1020 = self.upsample(self.relu(self.conv1020(x102)), size=shape_out)
+        x1030 = self.upsample(self.relu(self.conv1030(x103)), size=shape_out)
+        x1040 = self.upsample(self.relu(self.conv1040(x104)), size=shape_out)
 
         dehaze = torch.cat((x1010, x1020, x1030, x1040, x5), 1)
         residual = self.tanh(self.refine2(dehaze))
