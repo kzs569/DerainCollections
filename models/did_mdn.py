@@ -66,12 +66,17 @@ class DenseDerain(nn.Module):
         x2 = self.dense2(x)
         x1 = self.dense1(x)
 
-        label = Variable(torch.FloatTensor(1).cuda())
-        result = float(label_d.data.cpu().float().numpy())
-        label.data.resize_(
-            (self.cfg['batch_size'], 8, self.cfg['data']['patch_size'], self.cfg['data']['patch_size'])).fill_(result)
+        #label = Variable(torch.FloatTensor(1).cuda())
+        # result = label_d.data.cpu().float().numpy()
+        label = label_d.unsqueeze_(1).unsqueeze_(2).unsqueeze_(3)
+        label = label.repeat(-1, 8, self.cfg['data']['patch_size'], self.cfg['data']['patch_size'])
+        label = Variable(label, requires_grad=False)
+        # label = label.data.resize_((self.cfg['batch_size'],
+        #                             8,
+        #                             self.cfg['data']['patch_size'],
+        #                             self.cfg['data']['patch_size'])).fill_(label_result)
 
-        x4 = torch.cat([x1, x, x2, x3, label], 1)
+        x4 = torch.cat([x, x1, x2, x3, label], 1)
 
         x5 = self.relu((self.refine1(x4)))
 

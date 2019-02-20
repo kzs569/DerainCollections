@@ -10,7 +10,7 @@ This repo records some papers with implementation and finally make comparison be
 
 ## Important models' implementations in pytorch
 
-### Prerequisite
+### Dependencies
 - Python>=3.6
 - Pytorch>=1.0.0
 - Opencv>=3.1.0
@@ -34,16 +34,30 @@ This repo records some papers with implementation and finally make comparison be
 - JORDER : [Rain100H,Rain100L](http://www.icst.pku.edu.cn/struct/Projects/joint_rain_removal.html)
 - DID-MDN : [DID-MDN](https://drive.google.com/file/d/1cMXWICiblTsRl1zjN8FizF5hXOpVOJz4/view?usp=sharing)
 ### Training
+
 Two parameters:
+
 -c, --config : each networks configuration files which contains the parameter about model and training details.
+
 -t, --type : denote the model structure fully connected network or generative adversarial networks
+
+Example usage:
+
 ```bash
     python train.py -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
 ``` 
 ### Testing
+
+In order to test, you need to run the following command and set input_path to the folder with images (optionally, also set img_list to a list with subset of these image names), specify scaling by setting image_size (required for CelebA-HQ), file with network weights (net_path) and output directory (output_path).
+
+Example usage:
+
 ```bash
 python test.py  -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
 ```
+
+### Pretrained models
+
 
 ### Result
 
@@ -93,5 +107,13 @@ python test.py  -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
         [Attentive Generative Adversarial Network for Raindrop Removal from A Single Image,Rui Qian, Robby T. Tan et al, 2017](https://arxiv.org/pdf/1711.10098.pdf)
         
     - [Notes](./Notes/Att-GAN.md)
+5. Perceptual-GAN
+
+    - Paper
+        
+        [Perceptual Adversarial Networks for Image-to-Image Transformation,Chaoyue Wang, Chang Xu, et al, 2017](https://arxiv.org/pdf/1706.09138.pdf)
+        
+    - [Notes](./Notes/P_GAN.md)
+
     
     

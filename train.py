@@ -136,41 +136,6 @@ def train(cfg, logger, vis):
         scheduler.step()
         model.train()
 
-        # try:
-        #     O, B = next(iter(trainloader))
-        # except StopIteration:
-        #     O, B = next(iter(trainloader))
-        #
-        # O, B = O.cuda(), B.cuda()
-        # O, B = Variable(O, requires_grad=False), Variable(B, requires_grad=False)
-        # R = O - B
-        #
-        # O_Rs = model(O)
-        # loss_list = [crit(O_R, R) for O_R in O_Rs]
-        # ssim_list = [ssim(O - O_R, O - R) for O_R in O_Rs]
-        #
-        # sum(loss_list).backward()
-        # optimizer.step()
-        #
-        # losses = {
-        #     'loss%d' % i: loss.item()
-        #     for i, loss in enumerate(loss_list)
-        # }
-        # ssimes = {
-        #     'ssim%d' % i: ssim.item()
-        #     for i, ssim in enumerate(ssim_list)
-        # }
-        # losses.update(ssimes)
-        #
-        # losses['lr'] = optimizer.param_groups[0]['lr']
-        # losses['step'] = step
-        # outputs = [
-        #     "{}:{:.4g}".format(k, v)
-        #     for k, v in losses.items()
-        # ]
-        # logger.info('train' + '--' + ' '.join(outputs))
-        #
-        # pred = O - O_Rs[-1]
         if cfg['model'] == 'rescan':
             O, B, prediciton = inference_rescan(model=model, optimizer=optimizer, trainloader=trainloader,
                                                 critical=crit, ssim=ssim,
