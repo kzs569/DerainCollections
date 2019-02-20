@@ -8,7 +8,7 @@ import numpy as np
 import yaml
 
 import torch
-from torch.nn import MSELoss
+from torch.nn import MSELoss,L1Loss
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -126,7 +126,7 @@ def train(cfg, logger, vis):
 
     scheduler = MultiStepLR(optimizer, milestones=[15000, 17500], gamma=0.1)
 
-    crit = MSELoss().cuda()
+    crit = L1Loss().cuda()
     ssim = SSIM().cuda()
 
     step = 0
@@ -229,8 +229,8 @@ def inference_didmdn(model, optimizer, trainloader, critical, ssim, step, vis):
     R = O - B
     O_R, prediction = model(O, label)
 
-    loss = critical(R, O_R)
-    ssims = ssim(prediction, O)
+    loss = critical(B, prediction)
+    ssims = ssim(O-O_R, O-R)
     losses = {
         'loss : ': loss.item()
     }
@@ -429,7 +429,7 @@ if __name__ == '__main__':
 
     # Load the config file
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='./configs/didmdn_didmdn_rain.yaml')
+    parser.add_argument('-c', '--config', default='./configs/rescan_rescan_rain.yaml')
     parser.add_argument('-t', '--ntype', default='fcn', choices=['fcn', 'gan'])
     args = parser.parse_args()
 
