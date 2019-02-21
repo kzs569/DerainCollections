@@ -10,9 +10,8 @@ data:
 model : 'did_mdn'
 resume : true
 
-
-
 batch_size : 1
+critical : 'l1loss'
 optimizer :
   name : 'adam'
   lr : 5.0e-3

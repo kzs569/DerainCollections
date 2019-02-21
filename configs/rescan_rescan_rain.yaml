@@ -17,9 +17,10 @@ uint : 'GRU'  # ['Conv', 'RNN', 'GRU', 'LSTM']
 frame : 'Full'  # ['Add', 'Full']
 
 batch_size : 64
+critical : 'mseloss'
 optimizer :
   name : 'adam'
-  lr : 5.0e-3
+  lr : 5.0e-4
 
 checkpoint_dir : './checkpoints/rescan/'
 show_dir : './checkpoints/rescan/'

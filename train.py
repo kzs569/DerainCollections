@@ -20,6 +20,7 @@ from utils.visualize import Visualizer
 from utils.logger import get_logger
 from utils import clean_dir
 from optimizers import get_optimizer
+from losses import get_critical
 
 
 def ensure_dir(dir_path):
@@ -55,10 +56,6 @@ def save_image(name, img_lists, path, step):
     data, pred, label = img_lists
     data, pred, label = data * 255, pred.data * 255, label * 255
     pred = np.clip(pred, 0, 255)
-
-    print(data, data.shape)
-    print(pred, pred.shape)
-    print(label, label.shape)
 
     h, w = pred.shape[-2:]
 
@@ -126,7 +123,7 @@ def train(cfg, logger, vis):
 
     scheduler = MultiStepLR(optimizer, milestones=[15000, 17500], gamma=0.1)
 
-    crit = L1Loss().cuda()
+    crit = get_critical(cfg['critical'])().cuda()
     ssim = SSIM().cuda()
 
     step = 0
@@ -139,19 +136,25 @@ def train(cfg, logger, vis):
         model.train()
 
         if cfg['model'] == 'rescan':
-            O, B, prediciton = inference_rescan(model=model, optimizer=optimizer, trainloader=trainloader,
+            O, B, prediciton = inference_rescan(model=model, optimizer=optimizer, dataloader=trainloader,
                                                 critical=crit, ssim=ssim,
                                                 step=step, vis=vis)
         if cfg['model'] == 'did_mdn':
-            O, B, prediciton, label = inference_didmdn(model=model, optimizer=optimizer, trainloader=trainloader,
+            O, B, prediciton, label = inference_didmdn(model=model, optimizer=optimizer, dataloader=trainloader,
                                                        critical=crit, ssim=ssim,
                                                        step=step, vis=vis)
 
-        # if step % 4 == 0:
-        #     model.eval()
-        #     batch_v = next(iter(valloader))
-        #
-        #     pred_v = sess.inf_batch('val', batch_v)
+        if step % 4 == 0:
+            model.eval()
+            if cfg['model'] == 'rescan':
+                O, B, prediciton_v = inference_rescan(model=model, optimizer=optimizer, dataloader=valloader,
+                                                      critical=crit, ssim=ssim,
+                                                      step=step, vis=vis)
+            if cfg['model'] == 'did_mdn':
+                O, B, prediciton, label = inference_didmdn(model=model, optimizer=optimizer,
+                                                           dataloader=valloader,
+                                                           critical=crit, ssim=ssim,
+                                                           step=step, vis=vis)
 
         if step % int(cfg['save_steps'] / 16) == 0:
             save_checkpoints(model, step, optimizer, cfg['checkpoint_dir'], 'latest')
@@ -170,11 +173,11 @@ def train(cfg, logger, vis):
         step += 1
 
 
-def inference_rescan(model, optimizer, trainloader, critical, ssim, step, vis):
+def inference_rescan(model, optimizer, dataloader, critical, ssim, step, vis):
     try:
-        O, B = next(iter(trainloader))
+        O, B = next(iter(dataloader))
     except StopIteration:
-        O, B = next(iter(trainloader))
+        O, B = next(iter(dataloader))
 
     O, B = O.cuda(), B.cuda()
     O, B = Variable(O, requires_grad=False), Variable(B, requires_grad=False)
@@ -210,18 +213,18 @@ def inference_rescan(model, optimizer, trainloader, critical, ssim, step, vis):
     if vis is not None:
         for k, v in losses.items():
             vis.plot(k, v)
-        vis.images(np.clip(prediction.detach().cpu().numpy(), 0, 255)[:64], win='pred')
+        vis.images(np.clip((prediction.detach().data*255).cpu().numpy(), 0, 255)[:64], win='pred')
         vis.images(O.data.cpu().numpy()[:64], win='input')
         vis.images(B.data.cpu().numpy()[:64], win='groundtruth')
 
     return O, B, prediction
 
 
-def inference_didmdn(model, optimizer, trainloader, critical, ssim, step, vis):
+def inference_didmdn(model, optimizer, dataloader, critical, ssim, step, vis):
     try:
-        O, B, label = next(iter(trainloader))
+        O, B, label = next(iter(dataloader))
     except StopIteration:
-        O, B, label = next(iter(trainloader))
+        O, B, label = next(iter(dataloader))
 
     O, B, label = O.cuda(), B.cuda(), label.cuda()
     O, B, label = Variable(O, requires_grad=False), Variable(B, requires_grad=False), Variable(label.float(),
@@ -250,7 +253,7 @@ def inference_didmdn(model, optimizer, trainloader, critical, ssim, step, vis):
     if vis is not None:
         for k, v in losses.items():
             vis.plot(k, v)
-        vis.images(np.clip(prediction.detach().cpu().numpy(), 0, 255), win='pred')
+        vis.images(np.clip((prediction.detach().data*255).cpu().numpy(), 0, 255), win='pred')
         vis.images(O.data.cpu().numpy(), win='input')
         vis.images(B.data.cpu().numpy(), win='groundtruth')
         vis.images(R.data.cpu().numpy(), win='raindrop')
@@ -438,6 +441,8 @@ if __name__ == '__main__':
 
     if cfg['resume']:
         clean_dir(cfg['checkpoint_dir'])
+
+    print(cfg)
 
     # Setup the log
     run_id = random.randint(1, 100000)
