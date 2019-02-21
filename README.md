@@ -1,6 +1,10 @@
 Deep Convolutional Network in Single Image Derain
 ==================================
 
+## Todo List(02.21)
+    - Solution to loss bump
+    - fine tune the super parameter
+
 ## Overview
 Restoring rain images is important for many computer vision applications in outdoor scenes since rain streaks can severely degrade the visibility causing many current computer vision algorithms fails to work.
 
@@ -59,7 +63,7 @@ python test.py  -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
 ### Pretrained models
 
 
-### Result
+### Result(Todo)
 
 
 
