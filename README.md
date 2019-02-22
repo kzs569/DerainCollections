@@ -110,6 +110,10 @@ python test.py  -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
         
         [Attentive Generative Adversarial Network for Raindrop Removal from A Single Image,Rui Qian, Robby T. Tan et al, 2017](https://arxiv.org/pdf/1711.10098.pdf)
         
+    - Github
+    
+        [Attentive Generative Adversarial Network for Raindrop Removal from A Single Image (CVPR'2018)](https://github.com/rui1996/DeRaindrop)
+        
     - [Notes](./Notes/Att-GAN.md)
 5. Perceptual-GAN
 
