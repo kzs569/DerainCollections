@@ -76,3 +76,6 @@ Discriminator是一个图像分类的CNN结构
 ![](https://img-blog.csdn.net/20180327165233996?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2Vkb2dhd2FjaGlh/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
 
 综上，可以发现Perceputal Adversarial Net与Pix2Pix的区别就在于Discriminator，pix2pix的Discriminator就是一个CNN+FC的分类结构，PAN为了更多考虑低阶特征，对loss的计算进行了优化。
+
+- Inference
+[【文献阅读】Perceptual Generative Adversarial Networks for Small Object Detection –CVPR-2017](https://blog.csdn.net/u011995719/article/details/76615649)

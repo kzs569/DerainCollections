@@ -1,69 +1,95 @@
 import os
-import sys
 import argparse
+import yaml
+import random
+import shutil
+import numpy as np
 
 import torch
-from torch.nn import MSELoss
 from torch.autograd import Variable
+from datasets import get_loader
+from models import get_model
+from losses import get_critical
+from optimizers import get_optimizer
+from losses.cal_ssim import SSIM
+from utils import clean_dir, ensure_dir
+from utils.visualize import Visualizer
+from torch.optim.lr_scheduler import MultiStepLR
+from utils.logger import get_logger
 from torch.utils.data import DataLoader
 
-import settings
-from dataset import TestDataset
-from model import RESCAN
-from cal_ssim import SSIM
-
-logger = settings.logger
-torch.cuda.manual_seed_all(66)
-torch.manual_seed(66)
-torch.cuda.set_device(settings.device_id)
+# Setup device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def ensure_dir(dir_path):
-    if not os.path.isdir(dir_path):
-        os.makedirs(dir_path)
+def load_checkpoints(model, optim, model_dir, name='lastest'):
+    ckp_path = os.path.join(model_dir, name)
+    try:
+        print('Load checkpoint %s' % ckp_path)
+        obj = torch.load(ckp_path)
+    except FileNotFoundError:
+        print('No checkpoint %s!!' % ckp_path)
+        return False, None
+    model.load_state_dict(obj['net'])
+    optim.load_state_dict(obj['opt'])
+    step = obj['clock']
+    return True, step
 
 
-class Session:
-    def __init__(self):
-        self.log_dir = settings.log_dir
-        self.model_dir = settings.model_dir
-        ensure_dir(settings.log_dir)
-        ensure_dir(settings.model_dir)
-        logger.info('set log dir as %s' % settings.log_dir)
-        logger.info('set model dir as %s' % settings.model_dir)
+def test(cfg, logger, vis):
+    logger.info('set log dir as %s' % cfg['log_dir'])
+    logger.info('set model dir as %s' % cfg['model_dir'])
 
-        self.net = RESCAN().cuda()
-        self.crit = MSELoss().cuda()
-        self.ssim = SSIM().cuda()
-        self.dataloaders = {}
+    torch.cuda.manual_seed_all(66)
+    torch.manual_seed(66)
+    torch.cuda.set_device(device)
 
-    def get_dataloader(self, dataset_name):
-        dataset = TestDataset(dataset_name)
-        if not dataset_name in self.dataloaders:
-            self.dataloaders[dataset_name] = \
-                DataLoader(dataset, batch_size=1,
-                           shuffle=False, num_workers=1, drop_last=False)
-        return self.dataloaders[dataset_name]
+    # Setup model, optimizer and loss function
+    model_cls = get_model(cfg['model'])
+    model = model_cls(cfg).to(device)
 
-    def load_checkpoints(self, name):
-        ckp_path = os.path.join(self.model_dir, name)
-        try:
-            obj = torch.load(ckp_path)
-            logger.info('Load checkpoint %s' % ckp_path)
-        except FileNotFoundError:
-            logger.info('No checkpoint %s!!' % ckp_path)
-            return
-        self.net.load_state_dict(obj['net'])
+    optimizer_cls = get_optimizer(cfg)
+    optimizer_params = {k: v for k, v in cfg["optimizer"].items() if k != "name"}
+    optimizer = optimizer_cls(model.parameters(), **optimizer_params)
 
-    def inf_batch(self, name, batch):
-        O, B = batch['O'].cuda(), batch['B'].cuda()
-        O, B = Variable(O, requires_grad=False), Variable(B, requires_grad=False)
+    scheduler = MultiStepLR(optimizer, milestones=[5000, 10000, 15000], gamma=0.1)
+
+    crit = get_critical(cfg['critical'])().to(device)
+    ssim = SSIM().to(device)
+
+    model.eval()
+    _, step = load_checkpoints(model, optimizer, cfg['model_dir'], name='lastest')
+
+    # Setup Dataloader
+    data_loader = get_loader(cfg["data"]["dataset"])
+    data_path = cfg["data"]["path"]
+
+    test_loader = data_loader(
+        data_path,
+        split=cfg["data"]["test_split"],
+        patch_size=cfg['data']['patch_size'],
+        augmentation=cfg['data']['aug_data']
+    )
+
+    testloader = DataLoader(
+        test_loader,
+        batch_size=cfg["batch_size"],
+        num_workers=cfg["n_workers"],
+        shuffle=True,
+    )
+
+    all_num = 0
+    all_losses = {}
+    for i, batch in enumerate(testloader):
+
+        O, B = batch
+        O, B = Variable(O.to(device), requires_grad=False), Variable(B.to(device), requires_grad=False)
         R = O - B
 
         with torch.no_grad():
-            O_Rs = self.net(O)
-        loss_list = [self.crit(O_R, R) for O_R in O_Rs]
-        ssim_list = [self.ssim(O - O_R, O - R) for O_R in O_Rs]
+            O_Rs = model(O)
+        loss_list = [crit(O_R, R) for O_R in O_Rs]
+        ssim_list = [ssim(O - O_R, O - R) for O_R in O_Rs]
 
         losses = {
             'loss%d' % i: loss.item()
@@ -75,20 +101,10 @@ class Session:
         }
         losses.update(ssimes)
 
-        return losses
+        prediction = O - O_Rs[-1]
 
-
-def run_test(ckp_name):
-    sess = Session()
-    sess.net.eval()
-    sess.load_checkpoints(ckp_name)
-    dt = sess.get_dataloader('test')
-
-    all_num = 0
-    all_losses = {}
-    for i, batch in enumerate(dt):
-        losses = sess.inf_batch('test', batch)
         batch_size = batch['O'].size(0)
+
         all_num += batch_size
         for key, val in losses.items():
             if i == 0:
@@ -96,14 +112,45 @@ def run_test(ckp_name):
             all_losses[key] += val * batch_size
             logger.info('batch %d mse %s: %f' % (i, key, val))
 
+        if vis is not None:
+            for k, v in losses.items():
+                vis.plot(k, v)
+            vis.images(np.clip((prediction.detach().data * 255).cpu().numpy(), 0, 255), win='pred')
+            vis.images(O.data.cpu().numpy(), win='input')
+            vis.images(B.data.cpu().numpy(), win='groundtruth')
+
     for key, val in all_losses.items():
         logger.info('total mse %s: %f' % (key, val / all_num))
 
 
 if __name__ == '__main__':
+    # Load the config file
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--model', default='latest')
+    parser.add_argument('-c', '--config', default='./configs/rescan_rescan_rain.yaml')
+    parser.add_argument('-t', '--ntype', default='fcn', choices=['fcn', 'gan'])
+    args = parser.parse_args()
 
-    args = parser.parse_args(sys.argv[1:])
-    run_test(args.model)
+    with open(args.config) as fp:
+        cfg = yaml.load(fp)
 
+    if cfg['resume']:
+        clean_dir(cfg['checkpoint_dir'])
+
+    print(cfg)
+
+    # Setup the log
+    run_id = random.randint(1, 100000)
+    logdir = os.path.join(cfg['checkpoint_dir'], os.path.basename(args.config)[:-4] + str(run_id))
+    ensure_dir(logdir)
+    print("RUNDIR: {}".format(logdir))
+    shutil.copy(args.config, logdir)
+    logger = get_logger(logdir)
+    logger.info("Let the games begin")
+
+    # Setup the Visualizer
+    if cfg['vis']['use']:
+        vis = Visualizer(cfg['vis']['env'])
+    else:
+        vis = None
+
+    test(cfg, logger, vis)

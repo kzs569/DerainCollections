@@ -8,7 +8,6 @@ import numpy as np
 import yaml
 
 import torch
-from torch.nn import MSELoss,L1Loss
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -18,14 +17,12 @@ from models import get_model
 from losses.cal_ssim import SSIM
 from utils.visualize import Visualizer
 from utils.logger import get_logger
-from utils import clean_dir
+from utils import clean_dir, ensure_dir
 from optimizers import get_optimizer
 from losses import get_critical
 
-
-def ensure_dir(dir_path):
-    if not os.path.isdir(dir_path):
-        os.makedirs(dir_path)
+# Setup device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def save_checkpoints(model, step, optim, model_dir, name='lastest'):
@@ -83,9 +80,6 @@ def train(cfg, logger, vis):
     np.random.seed(cfg.get("seed", 1337))
     random.seed(cfg.get("seed", 1337))
 
-    # Setup device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     # Setup Dataloader
     data_loader = get_loader(cfg["data"]["dataset"])
     data_path = cfg["data"]["path"]
@@ -123,8 +117,8 @@ def train(cfg, logger, vis):
 
     scheduler = MultiStepLR(optimizer, milestones=[15000, 17500], gamma=0.1)
 
-    crit = get_critical(cfg['critical'])().cuda()
-    ssim = SSIM().cuda()
+    crit = get_critical(cfg['critical'])().to(device)
+    ssim = SSIM().to(device)
 
     step = 0
 
@@ -144,22 +138,22 @@ def train(cfg, logger, vis):
                                                        critical=crit, ssim=ssim,
                                                        step=step, vis=vis)
 
-        if step % 4 == 0:
-            model.eval()
-            if cfg['model'] == 'rescan':
-                O, B, prediciton_v = inference_rescan(model=model, optimizer=optimizer, dataloader=valloader,
-                                                      critical=crit, ssim=ssim,
-                                                      step=step, vis=vis)
-            if cfg['model'] == 'did_mdn':
-                O, B, prediciton, label = inference_didmdn(model=model, optimizer=optimizer,
-                                                           dataloader=valloader,
-                                                           critical=crit, ssim=ssim,
-                                                           step=step, vis=vis)
+        # if step % 4 == 0:
+        #     model.eval()
+        #     if cfg['model'] == 'rescan':
+        #         O, B, prediciton_v = inference_rescan(model=model, optimizer=optimizer, dataloader=valloader,
+        #                                               critical=crit, ssim=ssim,
+        #                                               step=step, vis=vis)
+        #     if cfg['model'] == 'did_mdn':
+        #         O, B, prediciton, label = inference_didmdn(model=model, optimizer=optimizer,
+        #                                                    dataloader=valloader,
+        #                                                    critical=crit, ssim=ssim,
+        #                                                    step=step, vis=vis)
 
         if step % int(cfg['save_steps'] / 16) == 0:
             save_checkpoints(model, step, optimizer, cfg['checkpoint_dir'], 'latest')
         if step % int(cfg['save_steps'] / 2) == 0:
-            #save_image('train', [O.cpu(), prediciton.cpu(), B.cpu()], cfg['checkpoint_dir'], step)
+            # save_image('train', [O.cpu(), prediciton.cpu(), B.cpu()], cfg['checkpoint_dir'], step)
             # if step % 4 == 0:
             #     save_image('val', [batch_v['O'], pred_v, batch_v['B']])
             logger.info('save image as step_%d' % step)
@@ -179,7 +173,9 @@ def inference_rescan(model, optimizer, dataloader, critical, ssim, step, vis):
     except StopIteration:
         O, B = next(iter(dataloader))
 
-    O, B = O.cuda(), B.cuda()
+    model.zero_grad()
+
+    O, B = O.to(device), B.to(device)
     O, B = Variable(O, requires_grad=False), Variable(B, requires_grad=False)
     R = O - B
 
@@ -213,7 +209,7 @@ def inference_rescan(model, optimizer, dataloader, critical, ssim, step, vis):
     if vis is not None:
         for k, v in losses.items():
             vis.plot(k, v)
-        vis.images(np.clip((prediction.detach().data*255).cpu().numpy(), 0, 255)[:64], win='pred')
+        vis.images(np.clip((prediction.detach() * 255).data.cpu().numpy(), 0, 255)[:64], win='pred')
         vis.images(O.data.cpu().numpy()[:64], win='input')
         vis.images(B.data.cpu().numpy()[:64], win='groundtruth')
 
@@ -226,14 +222,14 @@ def inference_didmdn(model, optimizer, dataloader, critical, ssim, step, vis):
     except StopIteration:
         O, B, label = next(iter(dataloader))
 
-    O, B, label = O.cuda(), B.cuda(), label.cuda()
+    O, B, label = O.to(device), B.to(device), label.to(device)
     O, B, label = Variable(O, requires_grad=False), Variable(B, requires_grad=False), Variable(label.float(),
                                                                                                requires_grad=False)
     R = O - B
     O_R, prediction = model(O, label)
 
     loss = critical(B, prediction)
-    ssims = ssim(O-O_R, O-R)
+    ssims = ssim(O - O_R, O - R)
     losses = {
         'loss : ': loss.item()
     }
@@ -253,7 +249,7 @@ def inference_didmdn(model, optimizer, dataloader, critical, ssim, step, vis):
     if vis is not None:
         for k, v in losses.items():
             vis.plot(k, v)
-        vis.images(np.clip((prediction.detach().data*255).cpu().numpy(), 0, 255), win='pred')
+        vis.images(np.clip((prediction.detach().data * 255).cpu().numpy(), 0, 255), win='pred')
         vis.images(O.data.cpu().numpy(), win='input')
         vis.images(B.data.cpu().numpy(), win='groundtruth')
         vis.images(R.data.cpu().numpy(), win='raindrop')

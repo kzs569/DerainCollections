@@ -121,6 +121,10 @@ python test.py  -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
         
         [Perceptual Adversarial Networks for Image-to-Image Transformation,Chaoyue Wang, Chang Xu, et al, 2017](https://arxiv.org/pdf/1706.09138.pdf)
         
+    - Github
+    
+        [PerceptualGAN](https://github.com/egorzakharov/PerceptualGAN)
+        
     - [Notes](./Notes/P_GAN.md)
 
     

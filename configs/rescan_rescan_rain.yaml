@@ -1,6 +1,6 @@
 data:
   dataset : rescan_rain
-  path : ./datasets/rescan_rain/
+  path : ./datasets/jorder_rain100l/
   train_split : train
   val_split : val
   test_split : test
@@ -20,7 +20,7 @@ batch_size : 64
 critical : 'mseloss'
 optimizer :
   name : 'adam'
-  lr : 5.0e-4
+  lr : 5.0e-3
 
 checkpoint_dir : './checkpoints/rescan/'
 show_dir : './checkpoints/rescan/'

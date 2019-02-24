@@ -1,5 +1,3 @@
-import logging
-
 from torch.optim import SGD, Adam, ASGD, Adamax, Adadelta, Adagrad, RMSprop
 
 
