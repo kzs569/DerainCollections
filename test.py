@@ -12,9 +12,8 @@ from models import get_model
 from losses import get_critical
 from optimizers import get_optimizer
 from losses.cal_ssim import SSIM
-from utils import clean_dir, ensure_dir
+from utils import ensure_dir
 from utils.visualize import Visualizer
-from torch.optim.lr_scheduler import MultiStepLR
 from utils.logger import get_logger
 from torch.utils.data import DataLoader
 
@@ -37,12 +36,8 @@ def load_checkpoints(model, optim, model_dir, name='lastest'):
 
 
 def test(cfg, logger, vis):
-    logger.info('set log dir as %s' % cfg['log_dir'])
-    logger.info('set model dir as %s' % cfg['model_dir'])
-
     torch.cuda.manual_seed_all(66)
     torch.manual_seed(66)
-    torch.cuda.set_device(device)
 
     # Setup model, optimizer and loss function
     model_cls = get_model(cfg['model'])
@@ -52,13 +47,11 @@ def test(cfg, logger, vis):
     optimizer_params = {k: v for k, v in cfg["optimizer"].items() if k != "name"}
     optimizer = optimizer_cls(model.parameters(), **optimizer_params)
 
-    scheduler = MultiStepLR(optimizer, milestones=[5000, 10000, 15000], gamma=0.1)
-
     crit = get_critical(cfg['critical'])().to(device)
     ssim = SSIM().to(device)
 
     model.eval()
-    _, step = load_checkpoints(model, optimizer, cfg['model_dir'], name='lastest')
+    _, step = load_checkpoints(model, optimizer, cfg['checkpoint_dir'], name='latest')
 
     # Setup Dataloader
     data_loader = get_loader(cfg["data"]["dataset"])
@@ -103,7 +96,7 @@ def test(cfg, logger, vis):
 
         prediction = O - O_Rs[-1]
 
-        batch_size = batch['O'].size(0)
+        batch_size = O.size(0)
 
         all_num += batch_size
         for key, val in losses.items():
@@ -127,14 +120,10 @@ if __name__ == '__main__':
     # Load the config file
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', default='./configs/rescan_rescan_rain.yaml')
-    parser.add_argument('-t', '--ntype', default='fcn', choices=['fcn', 'gan'])
     args = parser.parse_args()
 
     with open(args.config) as fp:
         cfg = yaml.load(fp)
-
-    if cfg['resume']:
-        clean_dir(cfg['checkpoint_dir'])
 
     print(cfg)
 
@@ -142,14 +131,14 @@ if __name__ == '__main__':
     run_id = random.randint(1, 100000)
     logdir = os.path.join(cfg['checkpoint_dir'], os.path.basename(args.config)[:-4] + str(run_id))
     ensure_dir(logdir)
-    print("RUNDIR: {}".format(logdir))
+    print("LOGDIR: {}".format(logdir))
     shutil.copy(args.config, logdir)
     logger = get_logger(logdir)
-    logger.info("Let the games begin")
+    logger.info("-------------------------------------Let the games begin----------------------------------")
 
     # Setup the Visualizer
     if cfg['vis']['use']:
-        vis = Visualizer(cfg['vis']['env'])
+        vis = Visualizer(cfg['vis']['env'] + '_test')
     else:
         vis = None
 
