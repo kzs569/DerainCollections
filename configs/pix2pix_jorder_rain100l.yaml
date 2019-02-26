@@ -1,6 +1,6 @@
 data:
-  dataset : rescan_rain
-  path : ./datasets/rescan_rain/
+  dataset : jorder_rain100l
+  path : ./datasets/jorder_rain100l/
   train_split : train
   val_split : val
   test_split : test
@@ -11,14 +11,13 @@ model : pix2pix
 resume : true
 netd : pix2pix_d
 netg : pix2pix_g
-batch_size : 1
+batch_size : 8
 input_nc : 3
 output_nc : 3
-direction : OtoB
+direction : 'OtoB'
 lamb : 100
 ngf : 64
 ndf : 64
-fineSize : 64
 
 optimizer :
   name : 'adam'

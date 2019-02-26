@@ -17,60 +17,12 @@ from models import get_model
 from losses.cal_ssim import SSIM
 from utils.visualize import Visualizer
 from utils.logger import get_logger
-from utils import clean_dir, ensure_dir
+from utils import clean_dir, ensure_dir, save_image, save_checkpoints
 from optimizers import get_optimizer
 from losses import get_critical
 
 # Setup device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-def save_checkpoints(model, step, optim, model_dir, name='lastest'):
-    ckp_path = os.path.join(model_dir, name)
-    obj = {
-        'net': model.state_dict(),
-        'clock': step,
-        'opt': optim.state_dict(),
-    }
-    torch.save(obj, ckp_path)
-
-
-def load_checkpoints(model, optim, model_dir, name='lastest'):
-    ckp_path = os.path.join(model_dir, name)
-    try:
-        print('Load checkpoint %s' % ckp_path)
-        obj = torch.load(ckp_path)
-    except FileNotFoundError:
-        print('No checkpoint %s!!' % ckp_path)
-        return False, None
-    model.load_state_dict(obj['net'])
-    optim.load_state_dict(obj['opt'])
-    step = obj['clock']
-    return True, step
-
-
-def save_image(name, img_lists, path, step):
-    data, pred, label = img_lists
-    data, pred, label = data * 255, pred.data * 255, label * 255
-    pred = np.clip(pred, 0, 255)
-
-    h, w = pred.shape[-2:]
-
-    gen_num = (6, 2)
-    img = np.zeros((gen_num[0] * h, gen_num[1] * 3 * w, 3))
-    for img_list in img_lists:
-        for i in range(gen_num[0]):
-            row = i * h
-            for j in range(gen_num[1]):
-                idx = i * gen_num[1] + j
-                tmp_list = [data[idx], pred[idx], label[idx]]
-                for k in range(3):
-                    col = (j * 3 + k) * w
-                    tmp = np.transpose(tmp_list[k], (1, 2, 0))
-                    img[row: row + h, col: col + w] = tmp
-
-    img_file = os.path.join(path, '%d_%s.jpg' % (step, name))
-    cv2.imwrite(img_file, img)
 
 
 def train(cfg, logger, vis):
@@ -138,24 +90,24 @@ def train(cfg, logger, vis):
                                                        critical=crit, ssim=ssim,
                                                        step=step, vis=vis)
 
-        # if step % 4 == 0:
-        #     model.eval()
-        #     if cfg['model'] == 'rescan':
-        #         O, B, prediciton_v = inference_rescan(model=model, optimizer=optimizer, dataloader=valloader,
-        #                                               critical=crit, ssim=ssim,
-        #                                               step=step, vis=vis)
-        #     if cfg['model'] == 'did_mdn':
-        #         O, B, prediciton, label = inference_didmdn(model=model, optimizer=optimizer,
-        #                                                    dataloader=valloader,
-        #                                                    critical=crit, ssim=ssim,
-        #                                                    step=step, vis=vis)
+        if step % 10 == 0:
+            model.eval()
+            if cfg['model'] == 'rescan':
+                O, B, prediciton_v = inference_rescan(model=model, optimizer=optimizer, dataloader=valloader,
+                                                      critical=crit, ssim=ssim,
+                                                      step=step, vis=vis)
+            if cfg['model'] == 'did_mdn':
+                O, B, prediciton, label = inference_didmdn(model=model, optimizer=optimizer,
+                                                           dataloader=valloader,
+                                                           critical=crit, ssim=ssim,
+                                                           step=step, vis=vis)
 
         if step % int(cfg['save_steps'] / 16) == 0:
             save_checkpoints(model, step, optimizer, cfg['checkpoint_dir'], 'latest')
         if step % int(cfg['save_steps'] / 2) == 0:
-            # save_image('train', [O.cpu(), prediciton.cpu(), B.cpu()], cfg['checkpoint_dir'], step)
-            # if step % 4 == 0:
-            #     save_image('val', [batch_v['O'], pred_v, batch_v['B']])
+            save_image('train', [O.cpu(), prediciton.cpu(), B.cpu()], cfg['checkpoint_dir'], step, cfg['batch_size'])
+            if step % 10 == 0:
+                save_image('val', [O.cpu(), prediciton.cpu(), B.cpu()], cfg['checkpoint_dir'], step, cfg['batch_size'])
             logger.info('save image as step_%d' % step)
         if step % cfg['save_steps'] == 0:
             save_checkpoints(model=model,
@@ -173,7 +125,8 @@ def inference_rescan(model, optimizer, dataloader, critical, ssim, step, vis):
     except StopIteration:
         O, B = next(iter(dataloader))
 
-    model.zero_grad()
+    if step % 10 != 0:
+        model.zero_grad()
 
     O, B = O.to(device), B.to(device)
     O, B = Variable(O, requires_grad=False), Variable(B, requires_grad=False)
@@ -183,8 +136,9 @@ def inference_rescan(model, optimizer, dataloader, critical, ssim, step, vis):
     loss_list = [critical(O_R, R) for O_R in O_Rs]
     ssim_list = [ssim(O - O_R, O - R) for O_R in O_Rs]
 
-    sum(loss_list).backward()
-    optimizer.step()
+    if step % 10 != 0:
+        sum(loss_list).backward()
+        optimizer.step()
 
     losses = {
         'loss%d' % i: loss.item()
@@ -222,6 +176,9 @@ def inference_didmdn(model, optimizer, dataloader, critical, ssim, step, vis):
     except StopIteration:
         O, B, label = next(iter(dataloader))
 
+    if step % 10 != 0:
+        model.zero_grad()
+
     O, B, label = O.to(device), B.to(device), label.to(device)
     O, B, label = Variable(O, requires_grad=False), Variable(B, requires_grad=False), Variable(label.float(),
                                                                                                requires_grad=False)
@@ -237,8 +194,9 @@ def inference_didmdn(model, optimizer, dataloader, critical, ssim, step, vis):
         'ssim : ': ssims.item()
     })
 
-    loss.backward()
-    optimizer.step()
+    if step % 10 != 0:
+        loss.backward()
+        optimizer.step()
 
     outputs = [
         "{}:{:.4g}".format(k, v)
@@ -264,9 +222,6 @@ def train_gan(cfg, logger, vis):
     np.random.seed(cfg.get("seed", 1337))
     random.seed(cfg.get("seed", 1337))
 
-    # Setup device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     # Setup Dataloader
     data_loader = get_loader(cfg["data"]["dataset"])
     data_path = cfg["data"]["path"]
@@ -278,20 +233,11 @@ def train_gan(cfg, logger, vis):
         augmentation=cfg['data']['aug_data']
     )
 
-    v_loader = data_loader(
-        data_path,
-        split=cfg["data"]["val_split"],
-    )
-
     train_loader = DataLoader(
         t_loader,
         batch_size=cfg["batch_size"],
         num_workers=cfg["n_workers"],
         shuffle=True,
-    )
-
-    val_loader = DataLoader(
-        v_loader, batch_size=cfg["batch_size"], num_workers=cfg["n_workers"]
     )
 
     # custom weights initialization called on netG and netD
@@ -322,6 +268,7 @@ def train_gan(cfg, logger, vis):
     ###########   LOSS & OPTIMIZER   ##########
     criterion = torch.nn.BCELoss()
     criterionL1 = torch.nn.L1Loss()
+
     optimizerD = torch.optim.Adam(netD.parameters(), lr=cfg['optimizer']['lr'],
                                   betas=(cfg['optimizer']['beta1'], 0.999))
     optimizerG = torch.optim.Adam(netG.parameters(), lr=cfg['optimizer']['lr'],
@@ -330,19 +277,13 @@ def train_gan(cfg, logger, vis):
     ###########   GLOBAL VARIABLES   ###########
     input_nc = cfg['input_nc']
     output_nc = cfg['output_nc']
-    fineSize = cfg['fineSize']
+    fineSize = cfg['data']['patch_size']
 
-    real_A = torch.FloatTensor(cfg['batch_size'], input_nc, fineSize, fineSize)
-    real_B = torch.FloatTensor(cfg['batch_size'], input_nc, fineSize, fineSize)
-    label = torch.FloatTensor(cfg['batch_size'])
-
-    real_A = Variable(real_A)
-    real_B = Variable(real_B)
-    label = Variable(label)
-
-    real_A = real_A.to(device)
-    real_B = real_B.to(device)
-    label = label.to(device)
+    real_A = Variable(torch.FloatTensor(cfg['batch_size'], input_nc, fineSize, fineSize), requires_grad=False).to(
+        device)
+    real_B = Variable(torch.FloatTensor(cfg['batch_size'], output_nc, fineSize, fineSize), requires_grad=False).to(
+        device)
+    label = Variable(torch.FloatTensor(cfg['batch_size']), requires_grad=False).to(device)
 
     real_label = 1
     fake_label = 0
@@ -393,43 +334,48 @@ def train_gan(cfg, logger, vis):
             errG = errGAN + cfg['lamb'] * errL1
 
             errG.backward()
-
             optimizerG.step()
 
             ########### Logging ##########
-            if (i % 50 == 0):
+            if i % 50 == 0:
                 logger.info('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f Loss_L1: %.4f'
                             % (epoch, cfg['max_iters'], i, len(train_loader),
                                errD.item(), errGAN.item(), errL1.item()))
 
             if cfg['vis']['use'] and (i % 50 == 0):
                 fake_B = netG(real_A)
-                vis.images(real_A.data.cpu().numpy()[:64] * 0.5 + 0.5, win='real_A')
-                vis.images(fake_B.detach().cpu().numpy()[:64] * 0.5 + 0.5, win='fake_B')
-                vis.images(real_B.data.cpu().numpy()[:64] * 0.5 + 0.5, win='real_B')
+                vis.images(real_A.data.cpu().numpy(), win='real_A')
+                vis.images(fake_B.detach().cpu().numpy(), win='fake_B')
+                vis.images(real_B.data.cpu().numpy(), win='real_B')
                 vis.plot('error_d', errD.item())
                 vis.plot('error_g', errGAN.item())
                 vis.plot('error_L1', errL1.item())
 
-        ########## Visualize #########
-        if (epoch % 5 == 0):
+        if epoch % 20 == 0:
             save_image(
                 name='train',
                 img_lists=[real_A.data.cpu(), fake_B.data.cpu(), real_B.data.cpu()],
                 path='%s/fake_samples_epoch_%03d.png' % (cfg['checkpoint_dir'], epoch),
-                step=epoch
+                step=epoch,
+                batch_size=cfg['batch_size']
             )
-
-    torch.save(netG.state_dict(), '%s/netG.pth' % (cfg['checkpoint_dir']))
-    torch.save(netD.state_dict(), '%s/netD.pth' % (cfg['checkpoint_dir']))
+            save_checkpoints(model=netG,
+                             step=epoch,
+                             optim=optimizerG,
+                             model_dir=cfg['checkpoint_dir'],
+                             name='{}_step_{}'.format(cfg['netg'] + cfg['data']['dataset'], epoch))
+            save_checkpoints(model=netD,
+                             step=epoch,
+                             optim=optimizerD,
+                             model_dir=cfg['checkpoint_dir'],
+                             name='{}_step_{}'.format(cfg['netd'] + cfg['data']['dataset'], epoch))
 
 
 if __name__ == '__main__':
 
     # Load the config file
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='./configs/rescan_rescan_rain.yaml')
-    parser.add_argument('-t', '--ntype', default='fcn', choices=['fcn', 'gan'])
+    parser.add_argument('-c', '--config', default='./configs/pix2pix_jorder_rain100l.yaml')
     args = parser.parse_args()
 
     with open(args.config) as fp:
@@ -456,7 +402,7 @@ if __name__ == '__main__':
         vis = None
 
     torch.multiprocessing.freeze_support()
-    if args.ntype == 'fcn':
+    if cfg['model'] in ['rescan', 'did_mdn']:
         train(cfg, logger, vis)
-    elif args.ntype == 'gan':
+    elif cfg['model'] in ['pix2pix']:
         train_gan(cfg, logger, vis)

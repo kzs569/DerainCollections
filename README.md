@@ -39,12 +39,10 @@ Two parameters:
 
 -c, --config : each networks configuration files which contains the parameter about model and training details.
 
--t, --type : denote the model structure fully connected network or generative adversarial networks
-
 Example usage:
 
 ```bash
-    python train.py -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
+    python train.py -c ./configs/didmdn_didmdn_rain.yaml 
 ``` 
 ### Testing
 

@@ -12,27 +12,13 @@ from models import get_model
 from losses import get_critical
 from optimizers import get_optimizer
 from losses.cal_ssim import SSIM
-from utils import ensure_dir
+from utils import ensure_dir, save_image,load_checkpoints
 from utils.visualize import Visualizer
 from utils.logger import get_logger
 from torch.utils.data import DataLoader
 
 # Setup device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-def load_checkpoints(model, optim, model_dir, name='lastest'):
-    ckp_path = os.path.join(model_dir, name)
-    try:
-        print('Load checkpoint %s' % ckp_path)
-        obj = torch.load(ckp_path)
-    except FileNotFoundError:
-        print('No checkpoint %s!!' % ckp_path)
-        return False, None
-    model.load_state_dict(obj['net'])
-    optim.load_state_dict(obj['opt'])
-    step = obj['clock']
-    return True, step
 
 
 def test(cfg, logger, vis):
@@ -103,7 +89,7 @@ def test(cfg, logger, vis):
             if i == 0:
                 all_losses[key] = 0.
             all_losses[key] += val * batch_size
-            logger.info('batch %d mse %s: %f' % (i, key, val))
+            logger.info('batch %d loss %s: %f' % (i, key, val))
 
         if vis is not None:
             for k, v in losses.items():
@@ -112,8 +98,15 @@ def test(cfg, logger, vis):
             vis.images(O.data.cpu().numpy(), win='input')
             vis.images(B.data.cpu().numpy(), win='groundtruth')
 
+        if i % 20 == 0:
+            save_image(name='test',
+                       img_lists=[O.cpu(), prediction.cpu(), B.cpu()],
+                       path=cfg['show_dir'],
+                       step=i,
+                       batch_size=cfg['batch_size'])
+
     for key, val in all_losses.items():
-        logger.info('total mse %s: %f' % (key, val / all_num))
+        logger.info('total loss %s: %f' % (key, val / all_num))
 
 
 if __name__ == '__main__':
