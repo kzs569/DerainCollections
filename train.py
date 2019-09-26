@@ -406,3 +406,4 @@ if __name__ == '__main__':
         train(cfg, logger, vis)
     elif cfg['model'] in ['pix2pix']:
         train_gan(cfg, logger, vis)
+

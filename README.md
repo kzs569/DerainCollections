@@ -120,6 +120,28 @@ python test.py  -c ./configs/didmdn_didmdn_rain.yaml -t 'fcn'
         [PerceptualGAN](https://github.com/egorzakharov/PerceptualGAN)
         
     - [Notes](./Notes/P_GAN.md)
-
     
+6. PReNet(CVPR-2019)
+    - Paper
+        
+        [Progressive Image Deraining Networks: A Better and Simpler Baseline](https://csdwren.github.io/papers/PReNet_cvpr_camera.pdf)
+        
+    - Github
     
+        [PReNet](https://github.com/csdwren/PReNet)
+      
+7. SPANet(CVPR-2019)
+    - Paper
+        
+        [Spatial Attentive Single-Image Deraining with a High Quality Real Rain Dataset ](https://drive.google.com/file/d/1XhpF_0DOTNpNzX0AwoLRGvx3ZcErZEHO/view)
+        
+    - Github
+    
+        [SPANet](https://github.com/stevewongv/SPANet)
+      
+8. [Single Image Deraining: A Comprehensive Benchmark Analysis (CVPR19)](https://github.com/lsy17096535/Single-Image-Deraining)
+ 
+9. [Densely Connected Pyramid Dehazing Network (CVPR2018)](https://arxiv.org/pdf/1803.08396.pdf)
+    - https://github.com/hezhangsprinter/DCPDN
+    
+10. [Depth-attentional Features for Single-image Rain Removal]()
